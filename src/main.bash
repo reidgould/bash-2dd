@@ -146,6 +146,7 @@ exec {logsFD}<>"$runDir/logs.fifo"
 logh1 "Tests"
 declare testFileBatch testFileBatches testJobPids=()
 declare numberTests=0 numberPassed=0 numberFailed=0 numberSkipped=0
+touch "$runDir/testFilesAllRun"
 if (( numJobs == 1))
 then
   export logsDir
