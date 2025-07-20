@@ -38,5 +38,6 @@ do
   #todo# Call logSkip for later statements if one fails.
 done < "$testFile"
 
-echo "SAMPLE TEST OUTPUT"
+echo "Example test output to stdout."
+log "Example test output to stderr."
 exit 9

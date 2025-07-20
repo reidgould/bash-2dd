@@ -1,10 +1,13 @@
 #! /usr/bin/env bash
 
+set -o errexit
+set -o pipefail
+
 #todo# Find a better way to reference dependencies.
 #declare depsDir="$( cd "$scriptDir/../../../" ; pwd ; )"
 source "$HOME/.bashrc.sourceAll.bash"
 #declare frameworkDir="$( cd "$scriptDir/../" ; pwd ; )"
-declare frameworkDir="/home/vscode/dotfiles.host/test/framework"
+declare frameworkDir="/home/$USER/.local/share/bash-2dd"
 source "$frameworkDir/src/lib.bash"
 
 sleep 0.1

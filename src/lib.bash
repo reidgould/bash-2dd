@@ -117,13 +117,13 @@ function runTest {
     # test
     if
       # Run the test in a sub process.
-      #todo# I THINK I AM MISSING THE STDOUT FROM THE TEST RUNS.
       #todo# INTERACTIVE! (just an alias for "--jobs 1 "and "--verbose"?) (record intput? now it's as easy as an extra "tee".)
       #todo# Verbose mode. Print screen output as it runs. print header when file starts.
+      # Warning: Output is lost if redirects use the file name twice like this:  >"$logTestStdErrOut" 2>"$logTestStdErrOut""
       export runDir frameworkDir testFile 
       logTestFD=$logTestFDSub logColor=always \
         "$testRunner" "$testFile" \
-          >"$logTestStdErrOut" 2>"$logTestStdErrOut"
+          >"$logTestStdErrOut" 2>&1
     then
       logPass "$testFileRel"
       #printf "%s\n" "$testFile" >> "$runDir/testFilesPassed"
