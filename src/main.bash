@@ -17,7 +17,7 @@ declare testMethodsToRun
 case "${BASH_SOURCE[0]}" in
   */tdd ) testMethodsToRun="tdd" ;;
   */bdd ) testMethodsToRun="bdd" ;;
-  */ddd ) testMethodsToRun="tdd,bdd" ;;
+  */2dd ) testMethodsToRun="tdd,bdd" ;;
   * ) testMethodsToRun="tdd,bdd" ;;
 esac
 
@@ -31,12 +31,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-mkdir -p "/tmp/$USER/ddd/run"
+mkdir -p "/tmp/$USER/2dd/run"
 declare runDir
-runDir="/tmp/$USER/ddd/run/$(date +%s)"
+runDir="/tmp/$USER/2dd/run/$(date +%s)"
 runDir=$(mktemp -d "$runDir.XXX")
 logDebug "runDir=$runDir"
-#todo# implement a "clean" command to 'rm -r "/tmp/$USER/ddd"'
+#todo# implement a "clean" command to 'rm -r "/tmp/$USER/2dd"'
 
 if [[ $testMethodsToRun =~ tdd ]]
 then
