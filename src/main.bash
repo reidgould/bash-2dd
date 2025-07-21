@@ -164,6 +164,10 @@ then
   done 3>&0 < "$runDir/testFilesAllRun"
   # Above: Save the terminal input on fd 3.
   # Above: When run in a background job, FD 0 will be /dev/null, not the terminal.
+  #
+  if isTruthy "$verbose"
+  then log; logh2 "Results"
+  fi
 elif (( numJobs > 1))
 then
   testFileBatches=( $( printf "$runDir/testFileBatch%s\n" $( seq 1 $numJobs ) ) )

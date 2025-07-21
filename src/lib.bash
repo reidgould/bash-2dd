@@ -115,7 +115,7 @@ function runTest {
         #
         if isTruthy "$verbose"
         then
-          logh2 "START $testFileRel"
+          log; logh2 "$testFileRel"
           exec > >(tee "$logTestStdErrOut") 2>&1
         else
           # Warning: Output is lost if redirects use the file name twice like this:  >"$logTestStdErrOut" 2>"$logTestStdErrOut""
