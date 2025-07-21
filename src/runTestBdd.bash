@@ -15,17 +15,17 @@ source "$HOME/.bashrc.sourceAll.bash"
 declare frameworkDir="$( cd "$scriptDir/../" ; pwd ; )"
 source "$frameworkDir/src/lib.bash"
 
-logTestIndent="  "
 
 # Load files with step implementations.
 
 #todo# Define a way for step files to output "pattern" -> "function" map.
-while read bddStepFile
-do
-  source "$bddStepFile"
-done < "$runDir/bddStepFilesFound"
+#todo# Implement "$runDir/bddStepFilesFound
+#while read bddStepFile
+#do
+#  source "$bddStepFile"
+#done < "$runDir/bddStepFilesFound"
 
-testFile="$1"; shift;
+testFile="${1?:Must define argument testFile.}"; shift;
 
 while read line
 do
@@ -40,4 +40,3 @@ done < "$testFile"
 
 echo "Example test output to stdout."
 log "Example test output to stderr."
-exit 9

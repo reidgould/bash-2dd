@@ -57,14 +57,6 @@ function parseFrontMatter {
   done
 }
 
-function runTestJob {
-  while read runKey testMethod testFile
-  do
-    runTest <&3 # Restore the terminal as stdin.
-  done 3>&0
-  # Above: Save the terminal input on fd 3.
-  # Above: When run in a background job, FD 0 will be /dev/null, not the terminal.
-}
 function runTest {
   : ${runDir?:Must define variable runDir}
   : ${logsDir?:Must define variable logsDir}
@@ -85,31 +77,21 @@ function runTest {
   esac
   #
   #logh1 "./${testFile#$PWD/}"
+  testFileRel="${testFile#$PWD/}"
+  testSlug="${testFileRel//\//_}"
   if [[ $doRun = "true" ]]
   then
     #
     # setup
-    declare testRunner
-    case "$testMethod" in
-      tdd )
-        #testRunner="$scriptDir/../src/runTestTdd.bash"
-        testRunner=runTestTdd
-        ;;
-      bdd )
-        testRunner="$scriptDir/../src/runTestBdd.bash"
-        ;;
-    esac
-    # ...
-    testFileRel="${testFile#$PWD/}"
-    testSlug="${testFileRel//\//_}"
     # For testDir, replace "/" with "_" for a flat structure.
     testDir="$runDir/tests/$testSlug"
-    mkdir -p "$testDir"
+    mkdir -p "$testDir" "${logsDir}/stdIn" "${logsDir}/stdErrOut"
     # ...
     export logTest=$( mktemp "${logsDir}/XXXX" )
     export logTestSub=$( mktemp "${logsDir}/XXXX" )
     export logTestStatus="${logsDir}/status/${testSlug}"
     export logTestStdErrOut="${logsDir}/stdErrOut/${testSlug}"
+    export logTestStdIn="${logsDir}/stdIn/${testSlug}"
     touch "$logTest" "$logTestSub"
     exec {logTestFD}<>"$logTest"
     exec {logTestFDSub}<>"$logTestSub"
@@ -117,21 +99,43 @@ function runTest {
     # test
     if
       # Run the test in a sub process.
-      #todo# INTERACTIVE! (just an alias for "--jobs 1 "and "--verbose"?) (record intput? now it's as easy as an extra "tee".)
-      #todo# Verbose mode. Print screen output as it runs. print header when file starts.
-      # Warning: Output is lost if redirects use the file name twice like this:  >"$logTestStdErrOut" 2>"$logTestStdErrOut""
-      export runDir frameworkDir testFile 
-      logTestFD=$logTestFDSub logColor=always \
-        "$testRunner" "$testFile" \
-          >"$logTestStdErrOut" 2>&1
+      (
+        export runDir frameworkDir testFile 
+        export logTestFD="$logTestFDSub"
+        export logColor=always
+        export logTestIndent="  "
+        #
+        ##todo# Record input for interactive mode.
+        #if isTruthy "$recordInput"
+        #then
+        #  exec < <( tee "$logTestStdIn" )
+        #  #exec < <( stdbuf -i0 -oL -eL tee "$logTestStdIn" )
+        #  #exec < <( stdbuf -i0 -o0 -e0 tee "$logTestStdIn" )
+        #fi
+        #
+        if isTruthy "$verbose"
+        then
+          logh2 "START $testFileRel"
+          exec > >(tee "$logTestStdErrOut") 2>&1
+        else
+          # Warning: Output is lost if redirects use the file name twice like this:  >"$logTestStdErrOut" 2>"$logTestStdErrOut""
+          exec >"$logTestStdErrOut" 2>&1
+        fi
+        #
+        # Run the test.
+        case "$testMethod" in
+          tdd ) exec "$testFile" ;;
+          bdd ) exec "$scriptDir/../src/runTestBdd.bash" "$testFile" ;;
+        esac
+      )
     then
       logPass "$testFileRel"
       #printf "%s\n" "$testFile" >> "$runDir/testFilesPassed"
-    (( ++ numberTests, ++ numberPassed ))
+      (( ++ numberTests, ++ numberPassed ))
     else
       logFail "$testFileRel"
       printf "%s\n" "$testFile" >> "$runDir/testFilesFailed"
-    (( ++ numberTests, ++ numberFailed ))
+      (( ++ numberTests, ++ numberFailed ))
     fi
     #
     # teardown
@@ -200,11 +204,4 @@ function logFiles {
     else cat "$logFileName" || :
     fi
   done
-}
-
-function runTestTdd {
-  # Execute the file.
-  logTestIndent="  " \
-    "$testFile"
-  #
 }

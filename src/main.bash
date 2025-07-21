@@ -21,15 +21,22 @@ case "${BASH_SOURCE[0]}" in
   * ) testMethodsToRun="tdd,bdd" ;;
 esac
 
+#todo# Let user define directory to search for tests. Let user define a specific file to test (and set --jobs 1).
 declare cmdTag=""
-declare numJobs=1
+declare numJobs=3
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --interactive | -i ) numJobs="1"; recordInput="true"; verbose="true"; shift;;
+    --verbose | -v ) verbose="true"; shift;;
     --tag | --tags ) cmdTag="${2/#@/}"; shift 2;;
     --jobs ) numJobs="$2"; shift 2;;
-    * ) logError "ERROR IN TEST: Unknown argument: \"$1\"."; return 4 ;;
+    * ) logError "ERROR IN TEST: Unknown argument: \"$1\"."; exit 4 ;;
   esac
 done
+
+if isTruthy "$verbose" && (( numJobs > 1 ))
+then logError "Argument \"--verbose\" is only compatible with \"--jobs 1\"."; exit 4;
+fi
 
 mkdir -p "/tmp/$USER/2dd/run"
 declare runDir
@@ -151,7 +158,12 @@ if (( numJobs == 1))
 then
   export logsDir
   # Don't background the test when using one job, so it can be interactive.
-  runTestJob < "$runDir/testFilesAllRun"
+  while read runKey testMethod testFile
+  do
+    runTest <&3 # Restore the terminal as stdin.
+  done 3>&0 < "$runDir/testFilesAllRun"
+  # Above: Save the terminal input on fd 3.
+  # Above: When run in a background job, FD 0 will be /dev/null, not the terminal.
 elif (( numJobs > 1))
 then
   testFileBatches=( $( printf "$runDir/testFileBatch%s\n" $( seq 1 $numJobs ) ) )
@@ -164,11 +176,16 @@ then
   # or it reads after "touch" and sees an empty file and closes it before "loadBalanceRoundRobin" writes.
   loadBalanceRoundRobin "$runDir/testFilesAllRun" "${testFileBatches[@]}"
   #
+  export runDir logsDir logsFD
   for testFileBatch in "${testFileBatches[@]}"
   do
-    # Run in background so multiple jobs can start.
-    export runDir logsDir logsFD
-    runTestJob < "$testFileBatch" &
+    while read runKey testMethod testFile
+    do
+      runTest < /dev/null
+    done < "$testFileBatch" &
+    # Above: Background the whole loop to process "testFileBatch" sequentially.
+    # Above: Multiple loops start in parallel for each "testFileBatches".
+    #todo# Test count is broken when backgrounding jobs.
     testJobPids+=( $! )
   done
 else
@@ -194,26 +211,30 @@ rm "$runDir/logs.fifo"
 
 
 # Output logs from failed test scripts.
-touch "$runDir/testFilesFailed"
-while read testFile
-do
-  testFileRel="${testFile#$PWD/}"
-  testSlug="${testFileRel//\//_}"
-  export logTestStdErrOut="${logsDir}/stdErrOut/${testSlug}"
-  #
-  #log; log "${tfx[fgRed]}${tfx[underline]}## Failure in test: ${testFileRel}${tfx[off]}"
-  log; log "${tfx[fgRed]}${tfx[invert]}## Failure in test: ${testFileRel}${tfx[off]}"
-  cat "$logTestStdErrOut" \
-    | sed -E "s/(.*)/${tfx[fgRed]}\1${tfx[off]}/"
-done < "$runDir/testFilesFailed"
+# FILE exists and has a size greater than zero
+if [[ -s "$runDir/testFilesFailed" ]]
+then
+  log; log "${tfx[fgRed]}${tfx[invert]}# Failed Test Logs${testFileRel}${tfx[off]}"
+  while read testFile
+  do
+    testFileRel="${testFile#$PWD/}"
+    testSlug="${testFileRel//\//_}"
+    export logTestStdErrOut="${logsDir}/stdErrOut/${testSlug}"
+    #
+    #log; log "${tfx[fgRed]}${tfx[underline]}## Failure in test: ${testFileRel}${tfx[off]}"
+    log; log "${tfx[fgRed]}${tfx[underline]}## ${testFileRel}${tfx[off]}"
+    cat "$logTestStdErrOut" \
+      | sed -E "s/(.*)/${tfx[fgRed]}\1${tfx[off]}/"
+  done < "$runDir/testFilesFailed"
+fi
 
-log; logh1 "Logs"
-
-# Output info about where to find detailed run data.
-log "To view the output of an individual test, \"cat\" the corresponding file found in the following directory."
-log "${logsDir}/stdErrOut"
 
 log; logh1 "Summary"
+
+# Output info about where to find detailed run data.
+#log "To view the output of an individual test, \"cat\" the corresponding file found in the following directory."
+log "To see test logs, \"cat\" files in directory:"
+log "${logsDir}/stdErrOut"
 
 # Log summary of number pass/fail/skip and total.
 declare numberTests numberPassed numberFailed numberSkipped

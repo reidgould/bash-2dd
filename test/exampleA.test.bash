@@ -1,4 +1,5 @@
 #! /usr/bin/env bash
+# @interactive
 
 set -o errexit
 set -o pipefail
@@ -10,9 +11,12 @@ source "$HOME/.bashrc.sourceAll.bash"
 declare frameworkDir="/home/$USER/.local/share/bash-2dd"
 source "$frameworkDir/src/lib.bash"
 
-sleep 0.1
+#sleep 0.1
 
-echo "Example test output to stdout."
+#read -p "input:" usrIn
+#printf "input:\n>"
+#read -t 2 usrIn
+echo "Example test output to stdout. got input: $usrIn"
 log "Example test output to stderr."
 #log "BASH_SOURCE=${BASH_SOURCE[0]}"
 #log "args=$@"
@@ -20,5 +24,3 @@ log "Example test output to stderr."
 logPass "Assertion 1"
 logPass "Assertion 2"
 logPass "Assertion 3"
-
-#exit 1
