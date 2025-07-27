@@ -2,10 +2,11 @@
 # Source this file.
 
 # Usage:
-# > findTestFiles '*.test.bash' > "$runDir/testFilesFound"
+# > findTestFiles '*.test.bash' > "$runDir/pipe/testFound"
 function findTestFiles {
   : ${1:?Must give arg 1}
   #
+  #todo# if fdfind is available, use it instead to take advantage of it's "ignore file" features.
   find "$PWD" \
     -mindepth 1 \
     \( \
@@ -31,6 +32,196 @@ function findTestFiles {
     | sort
 }
 
+function checkTestFiles {
+  #
+  declare testFile
+  while read testFile
+  do
+    #todo# fail on newlines or commas in testFile name.
+    #
+    declare testFileRel="${testFile#$PWD/}"
+    declare testFileDisplay="$testFileRel"
+    declare testFileSlug="${testFileRel//\//_}"
+    # Optional to replace ".". It reduces confusion of inaccurate file extensions.
+    testFileSlug="${testFileSlug//./_}"
+    #
+    printf "%s,%s,%s,%s\n" "tdd" "$testFile" "$testFileSlug" "$testFileDisplay"
+  done
+}
+
+function outputScenario {
+  #
+  : ${testFile?:Must define variable testFile.}
+  : ${scenarioNumber?:Must define variable scenarioNumber.}
+  : ${exampleNumber?:Must define variable exampleNumber.}
+  : ${flatOutDir?:Must define variable flatOutDir.}
+  #
+  declare testFileRel testFileDisplay testFileSlug testFileFlat
+  testFileRel="${testFile#$PWD/}"
+  if (( exampleNumber >= 0))
+  then
+    testFileDisplay="${testFileRel#$PWD/} (Scenario ${scenarioNumber}, Example ${exampleNumber})"
+    testFileSlug="${testFileRel//\//_}_s${scenarioNumber}_e${exampleNumber}"
+  else
+    testFileDisplay="${testFileRel#$PWD/} (Scenario ${scenarioNumber})"
+    testFileSlug="${testFileRel//\//_}_s${scenarioNumber}"
+  fi
+  # Optional to replace ".". It reduces confusion of inaccurate file extensions.
+  testFileSlug="${testFileSlug//./_}"
+  testFileFlat="$flatOutDir/$testFileSlug"
+  #
+  printf "%s\n" "${tagLinesApplyAll[@]}" >> "$testFileFlat"
+  printf "%s\n" "${tagLinesApplyScenario[@]}" >> "$testFileFlat"
+  printf "%s\n" "${backgroundLines[@]}" >> "$testFileFlat"
+  printf "%s\n" "${scenarioLines[@]}" >> "$testFileFlat"
+  #
+  printf "%s,%s,%s,%s\n" "bdd" "$testFileFlat" "$testFileSlug" "$testFileDisplay"
+}
+function flattenFeatureFiles {
+  # https://cucumber.io/docs/gherkin/reference/
+  #
+  declare flatOutDir="${1:?Must define argument flatOutDir.}"; shift
+  #
+  declare -a tagLines
+  declare -a tagLinesApplyAll
+  declare -a tagLinesApplyScenario
+  declare -a backgroundLines
+  declare -a scenarioLines
+  declare -a scenarioOutlineLines
+  #
+  declare testFile currentSection exampleNumber
+  #
+  while read testFile
+  do
+    #todo# fail on newlines or commas in testFile name.
+    # Split and flatten feature files into one "Scenario" per file.
+    tagLines=()
+    tagLinesApplyAll=()
+    tagLinesApplyScenario=()
+    backgroundLines=()
+    scenarioLines=()
+    scenarioOutlineLines=()
+    #
+    currentSection="None"
+    scenarioNumber="-1"
+    exampleNumber="-1"
+    #
+    while read line
+    do
+      case $line in
+        "" ) : Omit empty line ;;
+        \#* ) : Omit comment ;;
+        @* )
+          # Save tags for application when other statements are read.
+          tagLines+=( "$line" )
+          ;;
+        Feature* | Rule* )
+          currentSection="freeFormDescription"
+          # Omit feature and rule sections from output.
+          # Write leading tags in all test files.
+          tagLinesApplyAll=( "${tagLinesApplyAll[@]}" "${tagLines[@]}" )
+          tagLines=()
+          ;;
+        Background* )
+          # If "Background" comes after "Scenario" sections start, exit with error.
+          case "$currentSection" in
+            Scenario | "Scenario Outline" | Examples )
+              logError "Feature file has \"Background\" after Scenarios or Examples started."
+              return 4
+              ;;
+          esac
+          #
+          currentSection="Background"
+          # Write line in all test files.
+          backgroundLines+=( "$line" )
+          # Write leading tags in all test files.
+          tagLinesApplyAll=( "${tagLinesApplyAll[@]}" "${tagLines[@]}" )
+          tagLines=()
+          ;;
+        Scenario* | Example* )
+          # "Example" keyword is equivalent to "Scenario", usually goes with "Rule". Not equivalent to "Examples" which goes with "Scenario Outline".
+          currentSection="Scenario"
+          #
+          # Output one test file per Scenario.
+          if (( scenarioNumber >= 0 ))
+          then
+            outputScenario
+            tagLinesApplyScenario=()
+            scenarioLines=()
+            exampleNumber="-1"
+          else
+            : # Do nothing. The first time we find this keyword, we have not yet completed parsing a scenario to output.
+          fi
+          (( ++ scenarioNumber )) || : # Don't crash when number == 0.
+          #
+          # Write tags in scenario file.
+          tagLinesApplyScenario=( "${tagLinesApplyScenario[@]}" "${tagLines[@]}" )
+          tagLines=()
+          # Write line in test file.
+          scenarioLines+=( "$line" )
+          ;;
+        "Scenario Outline"* | "Scenario Template"* )
+          #todo# For "Scenario Outline" or "Scenario Template" keywords, inline "Examples" or "Scenarios" data and output a separate file for each.
+          logError "Scenario Outline not implemented."; return 5; #todo# implement
+          currentSection="Scenario Outline"
+          # Write line in test file.
+          #todo# Flatten the "Scenario Outline" prefix to "Scenario"? Or keep it adn match both in run step?
+          scenarioOutlineLines+=( "$line" )
+          ;;
+        Given* | When* | Then* | And* | But* | \** )
+          # "\**" matches when line starts with literal "*", and then has more content.
+          case "$currentSection" in
+            Background )
+              # Write line in all test files.
+              backgroundLines+=( "$line" )
+              ;;
+            Scenario )
+              # Write line in test file.
+              scenarioLines+=( "$line" )
+              ;;
+            "Scenario Outline" )
+              # Write line in test file.
+              scenarioOutlineLines+=( "$line" )
+              ;;
+            freeFormDescription )
+              : # Omit line.
+              ;;
+            * ) logError "Step line found in invalid section of feature file: \"$line\""; return 4
+          esac
+          ;;
+        Examples* | Scenarios* )
+          #todo# For "Scenario Outline" or "Scenario Template" keywords, inline "Examples" or "Scenarios" data and output a separate file for each.
+          logError "Examples not implemented."; return 5; #todo# implement
+          currentSection="Examples"
+          ;;
+        \| )
+          logError "Examples not implemented."; return 5; #todo# implement
+          #todo# Use readarray with delim "|", then use a slice expansion to trim the leading and trailing elements.
+          if (( exampleNumber >= 0 ))
+          then
+            #todo# This is an example row. Replace strings in "scenarioOutlineLines", save in "scenarioLines", and output a test file.
+            :
+          else
+            #todo# This is the header row. Set strings to replace in "scenarioOutlineLines".
+            :
+          fi
+          (( ++ exampleNumber )) || : # Don't crash when number == 0.
+          ;;
+        * )
+          case "$currentSection" in
+            freeFormDescription ) : Omit description lines ;;
+            * ) logError "Invalid line in feature file: \"$line\""; return 4
+          esac
+          #todo# DocStrings not supported.
+          ;;
+      esac
+    done < <( sed -E -e '/^\s*$/d' -e 's/^\s+//'  "$testFile" )
+    # Above: sed removes empty lines and leading whitespace.
+    #
+    outputScenario
+  done
+}
+
 # Variables to declare in scope where function is called:
 # declare testOnly=false testSkip=false testTags=""
 #function parseFrontMatter {
@@ -42,7 +233,7 @@ function findTestFiles {
 #      --skip ) testSkip=true; shift ;;
 #      --tags ) testTags=$2; shift 2;;
 #      "" ) shift;;
-#      * ) echo "ERROR IN TEST: Unknown front matter: \"$1\"."; return 4 ;;
+#      * ) logError "ERROR IN TEST: Unknown front matter: \"$1\"."; return 4 ;;
 #    esac
 #  done
 #}
@@ -62,8 +253,10 @@ function runTest {
   : ${logsDir?:Must define variable logsDir}
   : ${logsFD?:Must define variable logsFD}
   : ${testFile?:Must define variable testFile}
+  : ${testFileSlug?:Must define variable testFileSlug}
+  : ${testFileDisplay?:Must define variable testFileDisplay}
   : ${testMethod?:Must define variable testMethod}
-  : ${testFile?:Must define variable runKey}
+  : ${runKey?:Must define variable runKey}
   #
   case "$runKey" in
     only ) doRun=true ;;
@@ -77,21 +270,19 @@ function runTest {
   esac
   #
   #logh1 "./${testFile#$PWD/}"
-  testFileRel="${testFile#$PWD/}"
-  testSlug="${testFileRel//\//_}"
   if [[ $doRun = "true" ]]
   then
     #
     # setup
     # For testDir, replace "/" with "_" for a flat structure.
-    testDir="$runDir/tests/$testSlug"
-    mkdir -p "$testDir" "${logsDir}/stdIn" "${logsDir}/stdErrOut"
+    testDir="$runDir/tests/$testFileSlug"
+    mkdir -p "$testDir" "${logsDir}/stdIn" "${logsDir}/stdOutErr"
     # ...
     export logTest=$( mktemp "${logsDir}/XXXX" )
     export logTestSub=$( mktemp "${logsDir}/XXXX" )
-    export logTestStatus="${logsDir}/status/${testSlug}"
-    export logTestStdErrOut="${logsDir}/stdErrOut/${testSlug}"
-    export logTestStdIn="${logsDir}/stdIn/${testSlug}"
+    export logTestStatus="${logsDir}/status/${testFileSlug}"
+    export logTestStdOutErr="${logsDir}/stdOutErr/${testFileSlug}"
+    export logTestStdIn="${logsDir}/stdIn/${testFileSlug}"
     touch "$logTest" "$logTestSub"
     exec {logTestFD}<>"$logTest"
     exec {logTestFDSub}<>"$logTestSub"
@@ -115,11 +306,11 @@ function runTest {
         #
         if isTruthy "$verbose"
         then
-          log; logh2 "$testFileRel"
-          exec > >(tee "$logTestStdErrOut") 2>&1
+          log; logh2 "$testFileDisplay"
+          exec > >(tee "$logTestStdOutErr") 2>&1
         else
-          # Warning: Output is lost if redirects use the file name twice like this:  >"$logTestStdErrOut" 2>"$logTestStdErrOut""
-          exec >"$logTestStdErrOut" 2>&1
+          # Warning: Output is lost if redirects use the file name twice like this:  >"$logTestStdOutErr" 2>"$logTestStdOutErr""
+          exec >"$logTestStdOutErr" 2>&1
         fi
         #
         # Run the test.
@@ -129,13 +320,11 @@ function runTest {
         esac
       )
     then
-      logPass "$testFileRel"
-      #printf "%s\n" "$testFile" >> "$runDir/testFilesPassed"
-      (( ++ numberTests, ++ numberPassed ))
+      logPass "$testFileDisplay"
+      printf "%s\n" "$testFile" >> "$runDir/pipe/passed"
     else
-      logFail "$testFileRel"
-      printf "%s\n" "$testFile" >> "$runDir/testFilesFailed"
-      (( ++ numberTests, ++ numberFailed ))
+      logFail "$testFileDisplay"
+      printf "%s,%s,%s\n" "$testFile" "$testFileSlug" "$testFileDisplay" >> "$runDir/pipe/failed"
     fi
     #
     # teardown
@@ -148,8 +337,9 @@ function runTest {
     printf "%s\n" "$logTestStatus" >&$logsFD
     #
   else
-    logSkip "$testFileRel"
-    (( ++ numberTests, ++ numberSkipped ))
+    logColor=always logSkip "$testFileDisplay" >"${logsDir}/status/${testFileSlug}" 2>&1
+    printf "%s\n" "${logsDir}/status/${testFileSlug}" >&$logsFD
+    printf "%s\n" "$testFile" >> "$runDir/pipe/skipped"
   fi
 }
 

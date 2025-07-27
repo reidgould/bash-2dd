@@ -6,6 +6,8 @@ set -o pipefail
 : ${runDir?:Must define variable runDir}
 : ${frameworkDir?:Must define variable frameworkDir}
 : ${logTestFD?:Must define variable logTestFD}
+#
+testFile="${1?:Must define argument testFile.}"; shift;
 
 declare scriptDir="$(dirname "$(realpath -s "${BASH_SOURCE[0]}")")"
 
@@ -16,27 +18,60 @@ declare frameworkDir="$( cd "$scriptDir/../" ; pwd ; )"
 source "$frameworkDir/src/lib.bash"
 
 
-# Load files with step implementations.
+# Load step functions.
+declare -A steps
+function step {
+  steps["$1"]="$2"
+}
+while read bddSteps
+do
+  #logTest "loading file \"$bddSteps\""
+  source "$bddSteps"
+done < "$runDir/pipe/bddStepsFound"
 
-#todo# Define a way for step files to output "pattern" -> "function" map.
-#todo# Implement "$runDir/bddStepFilesFound
-#while read bddStepFile
-#do
-#  source "$bddStepFile"
-#done < "$runDir/bddStepFilesFound"
 
-testFile="${1?:Must define argument testFile.}"; shift;
-
+# Run lines from test file.
+declare line matchedFunction skipRest=false testStatus
 while read line
 do
-  if [[ "$line" =~ ^Feature|Rule|Scenario|Given|When|Then|And|But ]]
-  then logPass "$line"
-  else : # Ignore line
-  fi
-  #todo# Match "Given", "When", and "Then", and other Cucumber/Gherkin statements with functions defined in "$runDir/bddStepFilesFound"
-  #todo# Call logPass, logFail, and logSkip based on result of function.
-  #todo# Call logSkip for later statements if one fails.
+  case $line in
+    "" ) : Omit empty line ;;
+    \#* ) : Omit comment ;;
+    @* ) : Do nothing. ;;
+    Feature* | Rule* ) : Omit ;;
+    Background* ) logTest "${line}" ;;
+    Scenario* | Example* ) logTest "${line}" ;;
+    "Scenario Outline"* | "Scenario Template"* ) logTest "${line}" ;;
+    Given* | When* | Then* | And* | But* | \** )
+      if isTruthy skipRest
+      then logSkip "$line"; continue
+      fi
+      #
+      # Match line with step functions.
+      #matchedFunction=true
+      matchedFunction="" # Set to empty because it still has the value from last match.
+      for key in "${!steps[@]}"
+      do
+        if [[ $line =~ ${steps[$key]} ]]
+        then
+          matchedFunction="$key"
+          break
+        fi
+      done
+      if [[ -z $matchedFunction ]]
+      then logFail "$line"; logTest "No function pattern matched the step."; exit 1
+      fi
+      #logTest "matchedFunction=$matchedFunction"
+      #
+      if
+        log; logh3 "$matchedFunction \"$line\""
+        "$matchedFunction" "${BASH_REMATCH[@]:1}"
+      then logPass "$line"; testStatus=pass
+      else logFail "$line"; testStatus=fail; skipRest=true
+      fi
+      ;;
+    Examples* | Scenarios* ) logWarning "Statement \"Examples\" or \"Scenarios\" not expected in flattened file. line: \"$line\"." ;;
+    \| ) logWarning "Table character not expected in flattened file. line: \"$line\"." ;;
+    * ) logWarning "Unrecognized line found in flattened file. line: \"$line\"." ;;
+  esac
 done < "$testFile"
-
-echo "Example test output to stdout."
-log "Example test output to stderr."

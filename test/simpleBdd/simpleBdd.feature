@@ -1,9 +1,26 @@
-@my_feature_tag
-Feature: Library changes
+@tagOnFeature
+Feature: Simple BDD
+  Each scenario is run in a separate subprocess.
+  Step files are loaded and functions invokded based on
+  how they match to statements in the feature file.
 
-  @my_rule_tag
-  Rule: Members pay reservation of $1 per item
-  
-    @my_scenario_tag
-    Scenario: Reserving a single book
-    # this scenario has all three tags applied
+  @tagOnBackground
+  Background:
+    Given setup for all tests is ready.
+
+  @tagOnScenarioA
+  Scenario: Test A is run.
+    Given setup for test A is ready.
+    When test A runs.
+    Then test A passes assertions.
+
+  Scenario: Test B is run.
+    Given setup for test B is ready.
+    When test B runs.
+    Then test B passes assertions.
+
+  @skip @tagOnScenarioC
+  Scenario: Test C is run.
+    Given setup for test C is ready.
+    When test C runs.
+    Then test C passes assertions.

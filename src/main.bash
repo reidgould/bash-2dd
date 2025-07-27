@@ -43,55 +43,44 @@ declare runDir
 runDir="/tmp/$USER/2dd/run/$(date +%s)"
 runDir=$(mktemp -d "$runDir.XXX")
 logDebug "runDir=$runDir"
-#todo# implement a "clean" command to 'rm -r "/tmp/$USER/2dd"'
+mkdir "$runDir/pipe"
 
 if [[ $testMethodsToRun =~ tdd ]]
 then
   #todo# Support user given suffixes so any kind of executable file can run as a test.
-  findTestFiles '*.test.bash' > "$runDir/tddFilesFound"
-  touch "$runDir/bddStepFilesFound"
-  touch "$runDir/bddFeatureFilesFound"
+  findTestFiles '*.test.bash' > "$runDir/pipe/tddFound"
+  touch "$runDir/pipe/bddStepsFound"
+  touch "$runDir/pipe/bddFeatureFound"
 fi
 if [[ $testMethodsToRun =~ bdd ]]
 then
-  touch "$runDir/tddFilesFound"
+  touch "$runDir/pipe/tddFound"
   #todo# Support user given suffixes so any kind of executable file can run as a test.
-  findTestFiles '*.bdd-steps.bash' > "$runDir/bddStepFilesFound"
-  findTestFiles '*.feature' > "$runDir/bddFeatureFilesFound"
+  findTestFiles '*.test-steps.bash' > "$runDir/pipe/bddStepsFound"
+  findTestFiles '*.feature' > "$runDir/pipe/bddFeatureFound"
 fi
 
-touch "$runDir/bddFeatureFilesFlat" # In case there is no bdd files to process.
-while read featureFile
-do
-  #todo# Split and flatten feature files into one "Scenario" per file.
-  ###### Try csplit?  https://unix.stackexchange.com/questions/263904/split-file-into-multiple-files-based-on-pattern
-  #todo# ...
-  #todo# Omit comments.
-  #todo# Duplicate leading tags in each file.
-  #todo# Omit "Feature" and "Rule" sections.
-  #todo# Duplicate "Background" section in each file. If "Background" comes after "Scenario" sections start, exit with error.
-  #todo# One "Scenario" per each file.
-  #todo# Tags that appear after "Scenario" apply to the next Scenario. There should be no steps between a tag and a scenario.
-  #todo# Copy steps as is: Given, When, Then, And, But, "*".
-  #todo# For "Scenario Outline" or "Scenario Template" keywords, inline "Examples" or "Scenarios" data and output a separate file for each.
-  #todo# DocStrings not yet supported. Omit any lines that don't start with a keyword.
-  printf "%s\n" "$featureFile" > "$runDir/bddFeatureFilesFlat"
-done < "$runDir/bddFeatureFilesFound"
+checkTestFiles < "$runDir/pipe/tddFound" > "$runDir/pipe/tddChecked"
 
-sort "$runDir/tddFilesFound" "$runDir/bddFeatureFilesFlat" > "$runDir/testFilesAll"
+mkdir "$runDir/pipe/bddFeatureFlat.d"
+flattenFeatureFiles "$runDir/pipe/bddFeatureFlat.d" \
+  < "$runDir/pipe/bddFeatureFound" \
+  > "$runDir/pipe/bddFeatureFlat"
+
+sort --field-separator "," --key 3 --version-sort \
+  "$runDir/pipe/tddChecked" "$runDir/pipe/bddFeatureFlat" \
+  > "$runDir/pipe/all"
 
 declare foundOnly="false"
 declare runKey="initial"
 declare testFile frontMatter
-while read testFile
+while IFS=, read -d $'\n' testMethod testFile testFileSlug testFileDisplay
 do
   #logDebug "testFile=$testFile"
   declare testOnly=false testSkip=false testTags=""
   #
-  case "$testFile" in
-    *.feature )
-      testMethod="bdd"
-      #
+  case "$testMethod" in
+    bdd )
       # Search only "front matter", lines up to the ONLY (because we flattened the test files) "Scenario" keyword in the file.
       # Trim leading space.
       # Return only lines starting with "@".
@@ -103,9 +92,7 @@ do
       parseFrontMatter $frontMatter
       #logDebug "testOnly=$testOnly testSkip=$testSkip testTags=$testTags"
       ;;
-    * )
-      testMethod="tdd"
-      #
+    tdd )
       # Search only "front matter", meaning comments and empty lines at the beginning of the file.
       # Trim comment and leading space.
       # Return only lines starting with "@".
@@ -138,39 +125,39 @@ do
     fi
   fi
   #
-  printf "%s %s %s\n" "$runKey" "$testMethod" "$testFile" >> "$runDir/testFilesAllRun"
-done < "$runDir/testFilesAll"
-
+  printf "%s,%s,%s,%s,%s\n" \
+    "$runKey" "$testMethod" "$testFile" "$testFileSlug" "$testFileDisplay" \
+    >> "$runDir/pipe/allRun"
+done < "$runDir/pipe/all"
 
 declare logsDir="$runDir/logs"
 #mkdir -p "$logsDir"
 mkdir -p "$logsDir/status"
-mkdir -p "$logsDir/stdErrOut"
+mkdir -p "$logsDir/stdOutErr"
 mkfifo "$runDir/logs.fifo"
 ## Open the FD before because writers are going to be intermittent.
 exec {logsFD}<>"$runDir/logs.fifo"
 
 logh1 "Tests"
 declare testFileBatch testFileBatches testJobPids=()
-declare numberTests=0 numberPassed=0 numberFailed=0 numberSkipped=0
-touch "$runDir/testFilesAllRun"
+touch "$runDir/pipe/allRun"
 if (( numJobs == 1))
 then
   export logsDir
   # Don't background the test when using one job, so it can be interactive.
-  while read runKey testMethod testFile
+  while IFS=, read -d $'\n' runKey testMethod testFile testFileSlug testFileDisplay
   do
     runTest <&3 # Restore the terminal as stdin.
-  done 3>&0 < "$runDir/testFilesAllRun"
+  done 3>&0 < "$runDir/pipe/allRun"
   # Above: Save the terminal input on fd 3.
   # Above: When run in a background job, FD 0 will be /dev/null, not the terminal.
   #
   if isTruthy "$verbose"
-  then log; logh2 "Results"
+  then log; logh2 "Results" # The next thing to print after this is from "logFiles" function.
   fi
 elif (( numJobs > 1))
 then
-  testFileBatches=( $( printf "$runDir/testFileBatch%s\n" $( seq 1 $numJobs ) ) )
+  testFileBatches=( $( printf "$runDir/pipe/batch%s\n" $( seq 1 $numJobs ) ) )
   #
   #~# Run "loadBalanceRoundRobin" in background is optional because input and output are both static files.
   #~# Touch files so they exist when job tries to read them if "loadBalanceRoundRobin" hasn't created them yet.
@@ -178,18 +165,17 @@ then
   # Don't background "loadBalanceRoundRobin" unless we're going to open file descriptors because
   # either the reading process tries to read too early and finds a missing file
   # or it reads after "touch" and sees an empty file and closes it before "loadBalanceRoundRobin" writes.
-  loadBalanceRoundRobin "$runDir/testFilesAllRun" "${testFileBatches[@]}"
+  loadBalanceRoundRobin "$runDir/pipe/allRun" "${testFileBatches[@]}"
   #
   export runDir logsDir logsFD
   for testFileBatch in "${testFileBatches[@]}"
   do
-    while read runKey testMethod testFile
+    while IFS=, read -d $'\n' runKey testMethod testFile testFileSlug testFileDisplay
     do
       runTest < /dev/null
     done < "$testFileBatch" &
     # Above: Background the whole loop to process "testFileBatch" sequentially.
     # Above: Multiple loops start in parallel for each "testFileBatches".
-    #todo# Test count is broken when backgrounding jobs.
     testJobPids+=( $! )
   done
 else
@@ -197,6 +183,8 @@ else
   exit 4
 fi
 
+# When multiple jobs run, output test results as they complete.
+# In "interactive" mode, the single job is syncronous. "logFiles" is run after all tests, conveniently collecting results at the end.
 logFiles <&$logsFD &
 #logFiles < "$runDir/logs.fifo" &
 declare logFilesPid=$!
@@ -216,20 +204,18 @@ rm "$runDir/logs.fifo"
 
 # Output logs from failed test scripts.
 # FILE exists and has a size greater than zero
-if [[ -s "$runDir/testFilesFailed" ]]
+if [[ -s "$runDir/pipe/testFailed" ]]
 then
-  log; log "${tfx[fgRed]}${tfx[invert]}# Failed Test Logs${testFileRel}${tfx[off]}"
-  while read testFile
+  log; log "${tfx[fgRed]}${tfx[invert]}# Failed Test Logs${tfx[off]}"
+  while IFS=, read -d $'\n' testFile testFileSlug testFileDisplay
   do
-    testFileRel="${testFile#$PWD/}"
-    testSlug="${testFileRel//\//_}"
-    export logTestStdErrOut="${logsDir}/stdErrOut/${testSlug}"
+    export logTestStdOutErr="${logsDir}/stdOutErr/${testFileSlug}"
     #
-    #log; log "${tfx[fgRed]}${tfx[underline]}## Failure in test: ${testFileRel}${tfx[off]}"
-    log; log "${tfx[fgRed]}${tfx[underline]}## ${testFileRel}${tfx[off]}"
-    cat "$logTestStdErrOut" \
+    #log; log "${tfx[fgRed]}${tfx[underline]}## Failure in test: ${testFileDisplay}${tfx[off]}"
+    log; log "${tfx[fgRed]}${tfx[underline]}## ${testFileDisplay}${tfx[off]}"
+    cat "$logTestStdOutErr" \
       | sed -E "s/(.*)/${tfx[fgRed]}\1${tfx[off]}/"
-  done < "$runDir/testFilesFailed"
+  done < "$runDir/pipe/testFailed"
 fi
 
 
@@ -238,11 +224,14 @@ log; logh1 "Summary"
 # Output info about where to find detailed run data.
 #log "To view the output of an individual test, \"cat\" the corresponding file found in the following directory."
 log "To see test logs, \"cat\" files in directory:"
-log "${logsDir}/stdErrOut"
+log "${logsDir}/stdOutErr"
 
 # Log summary of number pass/fail/skip and total.
-declare numberTests numberPassed numberFailed numberSkipped
-log "$numberTests tests ran. $numberPassed passed. $numberFailed failed. $numberSkipped skipped."
+declare numberTests="$( cat "$runDir/pipe/all" 2>/dev/null | wc --lines )"
+declare numberPassed="$( cat "$runDir/pipe/passed" 2>/dev/null | wc --lines )"
+declare numberFailed="$( cat "$runDir/pipe/failed" 2>/dev/null | wc --lines )"
+declare numberSkipped="$( cat "$runDir/pipe/skipped" 2>/dev/null | wc --lines )"
+log; log "$numberTests tests ran. $numberPassed passed. $numberFailed failed. $numberSkipped skipped."
 
 # Exit nonzero if any tests failed.
 if (( numberFailed > 0 ))
