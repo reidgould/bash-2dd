@@ -1,16 +1,16 @@
 #! /usr/bin/env bash
 
-step setup_ready '^Given setup for (.*) is ready.$'
+given 'setup for (.*) is ready.' setup_ready
 function setup_ready {
   echo "Completed setup steps for $1"
 }
 
-step test_run '^When test (.*) runs.$'
+when 'test (.*) runs.' test_run
 function test_run {
   echo "Test $1 ran."
 }
 
-step test_assertions '^Then test (.*) passes assertions.$'
+then_ 'test (.*) passes assertions.' test_assertions
 function test_assertions {
   echo "Test $1 passed."
 }

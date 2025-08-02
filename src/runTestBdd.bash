@@ -19,9 +19,10 @@ source "$frameworkDir/src/lib.bash"
 
 # Load step functions.
 declare -A steps
-function step {
-  steps["$1"]="$2"
-}
+function step { steps["$2"]="$1"; }
+function given { step "$@" ; }
+function when { step "$@" ; }
+function then_ { step "$@" ; }
 while read bddSteps
 do
   #logTest "loading file \"$bddSteps\""
@@ -43,15 +44,18 @@ do
     "Scenario Outline"* | "Scenario Template"* ) logTest "${line}" ;;
     Given* | When* | Then* | And* | But* | \** )
       if isTruthy skipRest
+      #todo# this doesn't work.
       then logSkip "$line"; continue
       fi
       #
       # Match line with step functions.
       #matchedFunction=true
       matchedFunction="" # Set to empty because it still has the value from last match.
+      declare linePart="$(printf "%s" "$line" | sed -E 's/(Given|When|Then|And|But|\*)\s*//')"
+      #
       for key in "${!steps[@]}"
       do
-        if [[ $line =~ ${steps[$key]} ]]
+        if [[ $linePart =~ ${steps[$key]} ]]
         then
           matchedFunction="$key"
           break
@@ -63,7 +67,7 @@ do
       #logTest "matchedFunction=$matchedFunction"
       #
       if
-        log; logh3 "$matchedFunction \"$line\""
+        log; logh3 "\"$line\" $matchedFunction"
         "$matchedFunction" "${BASH_REMATCH[@]:1}"
       then logPass "$line"; testStatus=pass
       else logFail "$line"; testStatus=fail; skipRest=true
@@ -74,3 +78,5 @@ do
     * ) logWarning "Unrecognized line found in flattened file. line: \"$line\"." ;;
   esac
 done < "$testFile"
+
+#todo# exit using testStatus?

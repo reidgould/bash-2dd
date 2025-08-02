@@ -224,6 +224,7 @@ function flattenFeatureFiles {
 
 # Variables to declare in scope where function is called:
 # declare testOnly=false testSkip=false testTags=""
+# region #todo# delete?
 #function parseFrontMatter {
 #  while [[ $# -gt 0 ]]; do
 #    case "$1" in
@@ -237,6 +238,7 @@ function flattenFeatureFiles {
 #    esac
 #  done
 #}
+# endregion delete?
 function parseFrontMatter {
   while [[ $# -gt 0 ]]; do
     case "$1" in
