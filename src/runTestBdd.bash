@@ -43,8 +43,7 @@ do
     Scenario* | Example* ) logTest "${line}" ;;
     "Scenario Outline"* | "Scenario Template"* ) logTest "${line}" ;;
     Given* | When* | Then* | And* | But* | \** )
-      if isTruthy skipRest
-      #todo# this doesn't work.
+      if isTruthy $skipRest
       then logSkip "$line"; continue
       fi
       #
@@ -79,4 +78,4 @@ do
   esac
 done < "$testFile"
 
-#todo# exit using testStatus?
+exit $testStatus
