@@ -316,7 +316,7 @@ function runTest {
         # Run the test.
         case "$testMethod" in
           tdd ) exec "$testFile" ;;
-          bdd ) exec "$scriptDir/../src/runTestBdd.bash" "$testFile" ;;
+          bdd ) exec "$scriptDir/src/runTestBdd.bash" "$testFile" ;;
         esac
       )
     then

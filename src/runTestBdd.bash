@@ -11,10 +11,9 @@ testFile="${1?:Must define argument testFile.}"; shift;
 
 declare scriptDir="$(dirname "$(realpath -s "${BASH_SOURCE[0]}")")"
 
-#todo# Find a better way to reference dependencies.
-#declare depsDir="$( cd "$scriptDir/../../../" ; pwd ; )"
-source "$HOME/.bashrc.sourceAll.bash"
+# Source dependencies.
 declare frameworkDir="$( cd "$scriptDir/../" ; pwd ; )"
+source "$frameworkDir/dependencies.sourceAll.bash"
 source "$frameworkDir/src/lib.bash"
 
 
