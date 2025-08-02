@@ -24,9 +24,7 @@ function Given { step "$@" ; }
 function When { step "$@" ; }
 function Then { step "$@" ; }
 while read bddSteps
-do
-  #logTest "loading file \"$bddSteps\""
-  source "$bddSteps"
+do source "$bddSteps"
 done < "$runDir/pipe/bddStepsFound"
 
 
