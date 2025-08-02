@@ -9,7 +9,7 @@ Other test frameworks for bash are too complicated.
 
 ## Installation
 
-Clone the repository.
+Clone the repository. (It can be located anywhere, doesn't have to be in `~/.local/share`. Even use [subrepo](https://github.com/ingydotnet/git-subrepo). Just update the paths in the later steps to match.)
 
 ```
 git clone https://github.com/reidgould/bash-2dd.git "$HOME/.local/share/bash-2dd"
