@@ -3,12 +3,10 @@
 set -o errexit
 set -o pipefail
 
-
-#todo# Find a better way to reference dependencies.
-source "$HOME/.bashrc.sourceAll.bash"
-# ...
-#declare frameworkDir="/home/$USER/.local/share/bash-2dd"
-#source "$frameworkDir/src/lib.bash"
+# Source dependencies.
+declare scriptDir="$(dirname "$(realpath -s "${BASH_SOURCE[0]}")")"
+declare frameworkDir="$( cd "$scriptDir/../../" ; pwd ; )"
+source "$frameworkDir/dependencies/05-log.bash"
 
 logPass "Assertion 1"
 logPass "Assertion 2"
