@@ -56,6 +56,7 @@ then
   touch "$runDir/pipe/tddFound"
   #todo# Support user given suffixes so any kind of executable file can run as a test.
   findTestFiles '*.test-steps.bash' > "$runDir/pipe/bddStepsFound"
+  findTestFiles '*.testSteps.bash' >> "$runDir/pipe/bddStepsFound"
   findTestFiles '*.feature' > "$runDir/pipe/bddFeatureFound"
 fi
 
