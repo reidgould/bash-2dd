@@ -1,16 +1,24 @@
 #! /usr/bin/env bash
 
-given 'setup for (.*) is ready.' setup_ready
+Given 'setup for (all tests|test [ABC]) is ready.' setup_ready
 function setup_ready {
   echo "Completed setup steps for $1"
 }
 
-when 'test (.*) runs.' test_run
+When 'test ([ABC]) runs.' test_run
 function test_run {
   echo "Test $1 ran."
 }
 
-then_ 'test (.*) passes assertions.' test_assertions
+Then 'test ([ABC]) passes assertions.' test_assertions
 function test_assertions {
   echo "Test $1 passed."
 }
+
+When 'test with error runs.' test_run_error
+function test_run_error {
+  echo "Test had an error during run time."
+  return 1
+}
+
+Then '^it works.$' true

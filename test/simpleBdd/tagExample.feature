@@ -10,6 +10,8 @@ Feature: Library changes
     @my_scenario_tag
     Scenario: Reserving a single book
       # this scenario has all three tags applied
+      Then it works.
 
     Scenario: Reserving a single book
       # this scenario has two tags applied
+      Then it works.

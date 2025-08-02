@@ -24,3 +24,8 @@ Feature: Simple BDD
     Given setup for test C is ready.
     When test C runs.
     Then test C passes assertions.
+
+  Scenario: Test with error is run.
+    Given setup for test C is ready.
+    When test with error runs.
+    Then test C passes assertions.

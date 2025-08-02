@@ -20,9 +20,9 @@ source "$frameworkDir/src/lib.bash"
 # Load step functions.
 declare -A steps
 function step { steps["$2"]="$1"; }
-function given { step "$@" ; }
-function when { step "$@" ; }
-function then_ { step "$@" ; }
+function Given { step "$@" ; }
+function When { step "$@" ; }
+function Then { step "$@" ; }
 while read bddSteps
 do
   #logTest "loading file \"$bddSteps\""
@@ -31,7 +31,7 @@ done < "$runDir/pipe/bddStepsFound"
 
 
 # Run lines from test file.
-declare line matchedFunction skipRest=false testStatus
+declare line matchedFunction skipRest=false testStatus=5
 while read line
 do
   case $line in
@@ -68,8 +68,8 @@ do
       if
         log; logh3 "\"$line\" $matchedFunction"
         "$matchedFunction" "${BASH_REMATCH[@]:1}"
-      then logPass "$line"; testStatus=pass
-      else logFail "$line"; testStatus=fail; skipRest=true
+      then logPass "$line"; testStatus=0
+      else logFail "$line"; testStatus=1; skipRest=true
       fi
       ;;
     Examples* | Scenarios* ) logWarning "Statement \"Examples\" or \"Scenarios\" not expected in flattened file. line: \"$line\"." ;;
